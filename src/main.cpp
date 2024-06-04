@@ -3,8 +3,20 @@
 #include <SPI.h>
 #include <Wire.h>
 
+//#define DISPLAY_213_flex
+//#undef  DISPLAY_213_flex
+
+//#define CLEAR_SCREEN_ONLY
+//#undef  CLEAR_SCREEN_ONLY
+
+#ifdef DISPLAY_213_flex
 #include <GxEPD2_BW.h>
 #include <epd/GxEPD2_213_flex.h>
+#else
+#include <GxEPD2_4C.h>
+#include <epd4c/GxEPD2_300c.h>
+#endif
+
 #include <Fonts/FreeSansBold24pt7b.h>
 #include <Fonts/FreeSans9pt7b.h>
 
@@ -16,11 +28,13 @@
 #define EPD_RST_PIN  17
 #define EPD_BUSY_PIN 19
 
-//GxEPD2_213_flex display(GxEPD2_213_flex((int16_t) EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN));
-
+#ifdef DISPLAY_213_flex
 GxEPD2_BW<GxEPD2_213_flex, GxEPD2_213_flex::HEIGHT> display(
   GxEPD2_213_flex(EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN));
-
+#else
+GxEPD2_4C<GxEPD2_300c,GxEPD2_300c::HEIGHT> display(
+  GxEPD2_300c(EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN));
+#endif
 
 RTC_DATA_ATTR bool    displayFullInit    = true;
 RTC_DATA_ATTR double  tankFillState      = -1;
@@ -90,12 +104,13 @@ void drawTank(double fillingFraction){
   display.drawRoundRect(hMargin   ,y0   ,w      ,h      , radius   , GxEPD_BLACK);
   display.drawRoundRect(hMargin+1 ,y0+1 ,w-2    ,h-2    , radius-1 , GxEPD_BLACK);
   display.drawRoundRect(hMargin+2 ,y0+2 ,w-4    ,h-4    , radius-2 , GxEPD_BLACK);
+  display.fillRoundRect(hMargin+3 ,y0+3 ,w-6    ,h-6    , radius-3 , GxEPD_WHITE);
 
   int16_t ih  = (h-iO-iO)*fillingFraction;
   int16_t iy0 = y0+iO+((h-iO-iO)-ih);
   log_d("fillingFraction: %.2lf, y0: %d, ih: %d, iy0: %d", fillingFraction, y0,ih,iy0);
 
-  display.fillRoundRect(hMargin+iO,iy0,w-iO-iO,ih, radius-iO, GxEPD_BLACK);
+  display.fillRoundRect(hMargin+iO,iy0,w-iO-iO,ih, radius-iO, GxEPD_RED);
 }
 
 void setup()
@@ -113,16 +128,26 @@ void setup()
   pinMode(trigPin, OUTPUT); 
   pinMode(echoPin, INPUT);  
 
-  display.fillScreen(GxEPD_WHITE);
+  display.fillScreen(/*GxEPD_WHITE*/GxEPD_YELLOW); 
+#ifdef CLEAR_SCREEN_ONLY
+  delay(500);
+  display.display(false);
+  return;
+#endif
   display.drawCircle(display.width()/2,display.height()/2,(min(display.width(),display.height())-10)/2,GxEPD_BLACK);
+  display.drawCircle(display.width()/2,display.height()/2,((min(display.width(),display.height())-10)/2)-1,GxEPD_BLACK);
+  display.fillCircle(display.width()/2,display.height()/2,((min(display.width(),display.height())-10)/2)-2,GxEPD_RED);
 
   display.display(false);
   displayFullInit = false;
-  delay(500);
+  delay(15000);
 }
 
 void loop()
 {
+#ifdef CLEAR_SCREEN_ONLY
+  return;
+#endif
   // digitalWrite(trigPin, LOW);
   // delayMicroseconds(2); 
 
@@ -147,14 +172,16 @@ void loop()
 //  Serial.print("Distance: ");
 //  Serial.print(distance);
 //  Serial.println(" cm");
+  areaFraction = max(0.0,min(areaFraction,1.0));
+
   Serial.printf("distance: %d, diameter: %d, diameterFraction: %.2lf, areaFraction: %.2lf, capacityLeft: %d / %d\n", distance, diameterInCentimeters, diameterFraction,areaFraction,capacityLeft,capacityInLiters );
 
-
   if( tankFillState != areaFraction ) {
-    
-    tankFillState = max(0.0,min(areaFraction,1.0));
+    log_d("tankFillState: %.2lf != areaFraction: %.2lf", tankFillState, areaFraction);
 
-    display.fillScreen(GxEPD_WHITE);
+    tankFillState = areaFraction; //max(0.0,min(areaFraction,1.0));
+
+    display.fillScreen(/*GxEPD_WHITE*/GxEPD_YELLOW);
     //display.drawCircle(10,20,10,GxEPD_BLACK);
 
     char TXT_FULL[] = "FULL";
@@ -227,7 +254,7 @@ void loop()
 
     drawTank(tankFillState);
     display.display(true);
-    delay(500);
+    delay(10000);
   }
 
   delay(1000);
